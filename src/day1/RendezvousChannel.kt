@@ -69,16 +69,29 @@ class RendezvousChannel<E : Any> {
     }
 
     private fun isEmptyOrMatches(condition: (Any?) -> Boolean): Boolean {
-        val next = head.get().next.get() ?: return true
+        val next = firstOrNull() ?: return true
         return condition(next.element)
     }
 
+    private fun firstOrNull(): Node? {
+        return head.get().next.get()
+    }
+
     private fun tryAddNode(curTail: Node, newNode: Node): Boolean {
-        // if we are trying to add an element with a type different from the type of all elements in the queue,
-        // then it means that another operation has completed between the current operation, fail
-        when {
-            curTail.element === RECEIVER && newNode.element !== RECEIVER -> return false
-            curTail.element !== RECEIVER && newNode.element === RECEIVER -> return false
+        val curTailNext = curTail.next.get()
+        if (curTailNext != null && tail.compareAndSet(curTail, curTailNext)) {
+            return false
+        }
+
+        // at this point `tail` points to a real `curTail`
+        val isEmpty = firstOrNull() === null
+        if (!isEmpty) {
+            // if we are trying to add an element with a type different from the type of all elements in the queue,
+            // then it means that another operation has completed between the current operation, fail
+            when {
+                curTail.element === RECEIVER && newNode.element !== RECEIVER -> return false
+                curTail.element !== RECEIVER && newNode.element === RECEIVER -> return false
+            }
         }
 
         return if (curTail.next.compareAndSet(null, newNode)) {

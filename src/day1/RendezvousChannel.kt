@@ -22,7 +22,7 @@ class RendezvousChannel<E : Any> {
                     val node = Node(element, continuation as Continuation<Any?>)
                     if (!tryAddNode(tail.get(), node)) {
                         // Fail and retry.
-                        continuation.resume(null)
+                        continuation.resume(false)
                     }
                 }
                 // Finish on success and retry on failure.
@@ -44,7 +44,7 @@ class RendezvousChannel<E : Any> {
                     val node = Node(RECEIVER, continuation as Continuation<Any?>)
                     if (!tryAddNode(tail.get(), node)) {
                         // Fail and retry.
-                        continuation.resume(null)
+                        continuation.resume(false)
                     }
                 }
                 // Should we retry?
@@ -61,23 +61,41 @@ class RendezvousChannel<E : Any> {
     }
 
     private fun isEmptyOrContainsReceivers(): Boolean {
-        TODO(" Implement me!")
-        // For receivers, Node.element === RECEIVER
+        return isEmptyOrMatches { it === RECEIVER }
     }
 
     private fun isEmptyOrContainsSenders(): Boolean {
-        TODO(" Implement me!")
-        // For senders, Node.element !== RECEIVER
+        return isEmptyOrMatches { it !== RECEIVER }
+    }
+
+    private fun isEmptyOrMatches(condition: (Any?) -> Boolean): Boolean {
+        val next = head.get().next.get() ?: return true
+        return condition(next.element)
     }
 
     private fun tryAddNode(curTail: Node, newNode: Node): Boolean {
-        TODO("Implement me!")
-        // TODO: Return `false` if the attempt has failed.
+        // if we are trying to add an element with a type different from the type of all elements in the queue,
+        // then it means that another operation has completed between the current operation, fail
+        when {
+            curTail.element === RECEIVER && newNode.element !== RECEIVER -> return false
+            curTail.element !== RECEIVER && newNode.element === RECEIVER -> return false
+        }
+
+        return if (curTail.next.compareAndSet(null, newNode)) {
+            tail.compareAndSet(curTail, newNode)
+            true
+        } else {
+            tail.compareAndSet(curTail, curTail.next.get())
+            false
+        }
     }
 
     private fun tryExtractNode(curHead: Node): Node? {
-        TODO("Implement me!")
-        // TODO: Return a node with the extracted continuation & element.
+        val currentHeadNext = curHead.next.get() ?: return null
+        if (head.compareAndSet(curHead, currentHeadNext)) {
+            return currentHeadNext
+        }
+        return null
     }
 
     class Node(
@@ -91,4 +109,4 @@ class RendezvousChannel<E : Any> {
     }
 }
 
-private val RECEIVER = "Receiver"
+val RECEIVER = Any()

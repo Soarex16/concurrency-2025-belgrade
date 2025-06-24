@@ -10,7 +10,7 @@ abstract class AbstractQueueTest(
     threads: Int = 3,
     actorsBefore: Int = 1
 ) : TestBase(
-    scenarios = 100,
+    scenarios = 300,
     sequentialSpecification = IntQueueSequential::class,
     checkObstructionFreedom = checkObstructionFreedom,
     threads = threads,

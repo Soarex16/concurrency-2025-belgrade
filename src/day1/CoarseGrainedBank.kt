@@ -8,34 +8,38 @@ import java.util.concurrent.locks.*
 class CoarseGrainedBank(accountsNumber: Int) : Bank {
     private val accounts: Array<Account> = Array(accountsNumber) { Account() }
 
-    // TODO: use this mutex to protect all bank operations.
     private val globalLock = ReentrantLock()
 
-    override fun getAmount(id: Int): Long {
-        // TODO: Make this operation thread-safe via coarse-grained locking.
-        return accounts[id].amount
+    private inline fun <T> Lock.withLock(crossinline block: () -> T): T {
+        lock()
+        try {
+            return block()
+        } finally {
+            unlock()
+        }
     }
 
-    override fun deposit(id: Int, amount: Long): Long {
-        // TODO: Make this operation thread-safe via coarse-grained locking.
+    override fun getAmount(id: Int): Long = globalLock.withLock {
+        accounts[id].amount
+    }
+
+    override fun deposit(id: Int, amount: Long): Long = globalLock.withLock {
         require(amount > 0) { "Invalid amount: $amount" }
         val account = accounts[id]
         check(!(amount > MAX_AMOUNT || account.amount + amount > MAX_AMOUNT)) { "Overflow" }
         account.amount += amount
-        return account.amount
+        account.amount
     }
 
-    override fun withdraw(id: Int, amount: Long): Long {
-        // TODO: Make this operation thread-safe via coarse-grained locking.
+    override fun withdraw(id: Int, amount: Long): Long = globalLock.withLock {
         require(amount > 0) { "Invalid amount: $amount" }
         val account = accounts[id]
         check(account.amount - amount >= 0) { "Underflow" }
         account.amount -= amount
-        return account.amount
+        account.amount
     }
 
-    override fun transfer(fromId: Int, toId: Int, amount: Long) {
-        // TODO: Make this operation thread-safe via coarse-grained locking.
+    override fun transfer(fromId: Int, toId: Int, amount: Long) = globalLock.withLock {
         require(amount > 0) { "Invalid amount: $amount" }
         require(fromId != toId) { "fromIndex == toIndex" }
         val from = accounts[fromId]

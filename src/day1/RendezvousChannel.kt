@@ -44,7 +44,7 @@ class RendezvousChannel<E : Any> {
                     val node = Node(RECEIVER, continuation as Continuation<Any?>)
                     if (!tryAddNode(tail.get(), node)) {
                         // Fail and retry.
-                        continuation.resume(false)
+                        continuation.resume(null)
                     }
                 }
                 // Should we retry?

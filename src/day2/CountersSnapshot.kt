@@ -12,7 +12,19 @@ class CountersSnapshot {
     fun incrementCounter3() = counter3.getAndIncrement()
 
     fun countersSnapshot(): Triple<Long, Long, Long> {
-        // TODO: make me atomic using the double-collect technique.
-        return Triple(counter1.get(), counter2.get(), counter3.get())
+        while (true) {
+            val currentCounter1 = counter1.get()
+            val currentCounter2 = counter2.get()
+            if (currentCounter1 != counter1.get()) continue
+            // counter 1 is still valid, proceed
+
+            val currentCounter3 = counter3.get()
+
+            if (currentCounter1 != counter1.get()) continue
+            // counter 1 is still valid, proceed
+            if (currentCounter2 != counter2.get()) continue
+            // counter 2 is still valid, proceed
+            return Triple(currentCounter1, currentCounter2, currentCounter3)
+        }
     }
 }

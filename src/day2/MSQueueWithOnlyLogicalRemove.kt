@@ -13,30 +13,31 @@ class MSQueueWithOnlyLogicalRemove<E> : QueueWithRemove<E> {
     }
 
     override fun enqueue(element: E) {
-        // TODO: Copy your implementation.
-        TODO("Implement me!")
+        val newNode = Node(element)
+        while (true) {
+            val currentTail = tail.get()
+            if (currentTail.next.compareAndSet(null, newNode)) {
+                // success, update tail
+                tail.compareAndSet(currentTail, newNode)
+                return
+            } else {
+                // fail, fix the tail and repeat
+                tail.compareAndSet(currentTail, currentTail.next.get()) // TODO: is it correct?
+            }
+        }
     }
 
     override fun dequeue(): E? {
-        // TODO: Copy your implementation.
-        // TODO:
-        // TODO: After moving the `head` pointer forward,
-        // TODO: mark the node that contains the extracting
-        // TODO: element as "extracted or removed", restarting
-        // TODO: the operation if this node has already been removed.
-        TODO("Implement me!")
-    }
-
-    override fun remove(element: E): Boolean {
-        // Traverse the linked list, searching the specified
-        // element. Try to remove the corresponding node if found.
-        // DO NOT CHANGE THIS CODE.
-        var node = head.get()
         while (true) {
-            val next = node.next.get()
-            if (next == null) return false
-            node = next
-            if (node.element == element && node.remove()) return true
+            val currentHead = head.get()
+            val currentHeadNext = currentHead.next.get() ?: return null
+            if (head.compareAndSet(currentHead, currentHeadNext)){
+                if (currentHeadNext.markExtractedOrRemoved()) {
+                    val value = currentHeadNext.element
+                    currentHeadNext.element = null
+                    return value
+                }
+            }
         }
     }
 
@@ -50,6 +51,22 @@ class MSQueueWithOnlyLogicalRemove<E> : QueueWithRemove<E> {
         check(tail.get().next.get() == null) {
             "`tail.next` must be `null`"
         }
+    }
+
+    override fun remove(element: E): Boolean {
+        val currentHead = head.get()
+        var currentHeadNext = currentHead.next.get()
+        if (currentHeadNext == null) return false
+        while (currentHeadNext != null) {
+            if (currentHeadNext.element == element) {
+                if (currentHeadNext.markExtractedOrRemoved()) {
+                    currentHeadNext.element = null
+                    return true
+                }
+            }
+            currentHeadNext = currentHeadNext.next.get()
+        }
+        return false
     }
 
     private class Node<E>(
@@ -76,12 +93,7 @@ class MSQueueWithOnlyLogicalRemove<E> : QueueWithRemove<E> {
          * removed by [remove] or extracted by [dequeue].
          */
         fun remove(): Boolean {
-            // TODO: You need to mark the node as "extracted or removed".
-            // TODO: On success, this node is logically removed, and the
-            // TODO: operation should return `true`.
-            // TODO: Otherwise, the node is already either extracted or removed,
-            // TODO: so the operation should return `false`.
-            TODO("Implement me!")
+            return markExtractedOrRemoved()
         }
     }
 }

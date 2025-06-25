@@ -29,7 +29,7 @@ class RendezvousChannel<E : Any> {
                 if (success) return
             } else {
                 // The queue contains receivers, try to extract the first one.
-                val firstReceiver = tryExtractNode(head.get()) ?: continue
+                val firstReceiver = tryExtractNode(head.get(), expectingReceiver = true) ?: continue
                 firstReceiver.continuation!!.resume(element)
                 return
             }
@@ -53,7 +53,7 @@ class RendezvousChannel<E : Any> {
                 return element
             } else {
                 // The queue contains senders, try to extract the first one.
-                val firstSender = tryExtractNode(head.get()) ?: continue
+                val firstSender = tryExtractNode(head.get(), expectingReceiver = false) ?: continue
                 firstSender.continuation!!.resume(true)
                 return firstSender.element as E
             }
@@ -73,7 +73,7 @@ class RendezvousChannel<E : Any> {
         return condition(next.element)
     }
 
-    private fun firstOrNull(): Node? {
+    private fun firstOrNull(): Node? { // this operation is not atomic!
         return head.get().next.get()
     }
 
@@ -103,8 +103,12 @@ class RendezvousChannel<E : Any> {
         }
     }
 
-    private fun tryExtractNode(curHead: Node): Node? {
+    private fun tryExtractNode(curHead: Node, expectingReceiver: Boolean): Node? {
         val currentHeadNext = curHead.next.get() ?: return null
+        when {
+            expectingReceiver && currentHeadNext.element !== RECEIVER -> return null
+            !expectingReceiver && currentHeadNext.element === RECEIVER -> return null
+        }
         if (head.compareAndSet(curHead, currentHeadNext)) {
             return currentHeadNext
         }
@@ -122,4 +126,4 @@ class RendezvousChannel<E : Any> {
     }
 }
 
-val RECEIVER = Any()
+val RECEIVER = "RECEIVER"

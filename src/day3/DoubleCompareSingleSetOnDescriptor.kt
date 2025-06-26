@@ -63,41 +63,24 @@ class DoubleCompareSingleSetOnDescriptor<E : Any>(initialValue: E) : DoubleCompa
         }
 
         fun doApply() {
-            while (true) {
-                val curStatus = status.get()
-                when (curStatus) {
-                    UNDECIDED -> {
-                        val success = tryUpdateLogically()
-                        if (success) {
-                            tryUpdatePhysically()
-                            return
-                        } else {
-                            status.compareAndSet(UNDECIDED, FAILED)
-                        }
-                    }
-                    SUCCESS -> {
-                        tryUpdatePhysically()
-                        return
-                    }
-                    FAILED -> {
-                        rollback()
-                        return
-                    }
-                }
+            updateLogically()
+
+            val finalStatus = status.get()
+            check(finalStatus !== UNDECIDED)
+
+            // update physically
+            val newA = if (finalStatus == SUCCESS) updateA else expectedA
+            a.compareAndSet(this, newA)
+        }
+
+        fun updateLogically() {
+            val newStatus = if (b.get() === expectedB) {
+                SUCCESS
+            } else {
+                FAILED
             }
-        }
-
-        private fun rollback() {
-            a.compareAndSet(this, expectedA)
-        }
-
-        private fun tryUpdateLogically(): Boolean {
-            if (b.get() != expectedB) return false
-            return status.compareAndSet(UNDECIDED, SUCCESS)
-        }
-
-        private fun tryUpdatePhysically() {
-            a.compareAndSet(this, updateA)
+            // logically update state
+            status.compareAndSet(UNDECIDED, newStatus)
         }
     }
 

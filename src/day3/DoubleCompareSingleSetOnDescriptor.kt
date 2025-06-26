@@ -16,8 +16,13 @@ class DoubleCompareSingleSetOnDescriptor<E : Any>(initialValue: E) : DoubleCompa
     }
 
     override fun getA(): E {
-        // TODO: 'a' can store CAS2Descriptor
-        return a.get() as E
+        while (true) {
+            val curA = a.get()
+            when {
+                curA is DoubleCompareSingleSetOnDescriptor<*>.DcssDescriptor -> curA.doApply()
+                else -> return curA as E
+            }
+        }
     }
 
     override fun dcss(expectedA: E, updateA: E, expectedB: E): Boolean {
@@ -32,9 +37,67 @@ class DoubleCompareSingleSetOnDescriptor<E : Any>(initialValue: E) : DoubleCompa
         val status = AtomicReference(UNDECIDED)
 
         fun apply() {
-            // TODO: (1) Install the descriptor to 'a'
-            // TODO: (2) Apply logically: check whether 'b' == expectedB and update the status
-            // TODO: (3) Apply physically: update 'a'
+            // try install descriptor
+            while (true) {
+                val curA = a.get()
+                when {
+                    curA is DoubleCompareSingleSetOnDescriptor<*>.DcssDescriptor -> {
+                        // descriptor is already installed (by us or by another one) -> help apply
+                        curA.doApply()
+                    }
+                    // curA === expectedA -> try to install
+                    curA === expectedA -> {
+                        // if we failed to install -> someone another installed, retry
+                        if (!a.compareAndSet(expectedA, this)) continue
+                        // we successfully installed the descriptor, handle states
+                        doApply()
+                        return
+                    }
+                    // curA !== expectedA -> fail
+                    else -> {
+                        status.compareAndSet(UNDECIDED, FAILED)
+                        return
+                    }
+                }
+            }
+        }
+
+        fun doApply() {
+            while (true) {
+                val curStatus = status.get()
+                when (curStatus) {
+                    UNDECIDED -> {
+                        val success = tryUpdateLogically()
+                        if (success) {
+                            tryUpdatePhysically()
+                            return
+                        } else {
+                            status.compareAndSet(UNDECIDED, FAILED)
+                        }
+                    }
+                    SUCCESS -> {
+                        tryUpdatePhysically()
+                        return
+                    }
+                    FAILED -> {
+                        rollback()
+                        return
+                    }
+                }
+            }
+        }
+
+        private fun rollback() {
+            a.compareAndSet(this, expectedA)
+        }
+
+        private fun tryUpdateLogically(): Boolean {
+            if (b.get() != expectedB) return false
+            return status.compareAndSet(UNDECIDED, SUCCESS)
+        }
+
+        private fun tryUpdatePhysically() {
+            a.compareAndSet(this, updateA)
         }
     }
 

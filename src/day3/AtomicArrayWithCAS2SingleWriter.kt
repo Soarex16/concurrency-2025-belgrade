@@ -17,8 +17,32 @@ class AtomicArrayWithCAS2SingleWriter<E : Any>(size: Int, initialValue: E) {
     }
 
     fun get(index: Int): E {
-        // TODO: the cell can store CAS2Descriptor
-        return array[index] as E
+        while (true) {
+            val curValue = array.get(index)
+            when {
+                curValue is AtomicArrayWithCAS2SingleWriter<*>.CAS2Descriptor -> {
+                    when (curValue.status.get()) {
+                       UNDECIDED, FAILED -> {
+                           val prevValue = if (index == curValue.index1) {
+                               curValue.expected1
+                           } else {
+                               curValue.expected2
+                           }
+                           return prevValue as E
+                       }
+                       SUCCESS -> {
+                           val newValue = if (index == curValue.index1) {
+                               curValue.update1
+                           } else {
+                               curValue.update2
+                           }
+                           return newValue as E
+                       }
+                    }
+                }
+                else -> return curValue as E
+            }
+        }
     }
 
     fun cas2(
@@ -41,10 +65,35 @@ class AtomicArrayWithCAS2SingleWriter<E : Any>(size: Int, initialValue: E) {
         val status = AtomicReference(UNDECIDED)
 
         fun apply() {
-            // TODO: Install the descriptor, update the status, and update the cells;
-            // TODO: create functions for each of these three phases.
-            // TODO: In this task, only one thread can call cas2(..),
-            // TODO: so cas2(..) calls cannot be executed concurrently.
+            if (!tryInstallDescriptor()) {
+                // if failed to install descriptor - rollback
+                array.compareAndSet(index1, this, expected1)
+                array.compareAndSet(index2, this, expected2)
+                status.compareAndSet(UNDECIDED, FAILED)
+                return
+            }
+            tryUpdateLogically()
+            tryUpdatePhysically()
+        }
+
+        fun tryInstallDescriptor(): Boolean {
+            return array.compareAndSet(index1, expected1, this)
+                    && array.compareAndSet(index2, expected2, this)
+        }
+
+        private fun tryUpdateLogically() {
+            // always succeeds because we own both cells
+            status.compareAndSet(UNDECIDED, SUCCESS)
+        }
+
+        private fun tryUpdatePhysically() {
+            val finalStatus = status.get()
+            require(finalStatus !== UNDECIDED)
+
+            val new1 = if (finalStatus == SUCCESS) update1 else expected1
+            val new2 = if (finalStatus == SUCCESS) update2 else expected2
+            array.compareAndSet(index1, this, new1)
+            array.compareAndSet(index2, this, new2)
         }
     }
 
